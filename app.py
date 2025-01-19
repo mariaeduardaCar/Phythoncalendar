@@ -16,7 +16,7 @@ app.secret_key = '12345'  # Substitua por uma chave segura
 
 GOOGLE_CLIENT_SECRETS = 'credenciais.json'
 SCOPES = ['https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/userinfo.email', 'openid']
-REDIRECT_URI = 'https://calendariopy-c45c5899cd7a.herokuapp.com/callback'
+REDIRECT_URI = 'https://calendariopy.herokuapp.com/callback'
 
 # Conectar ao banco de dados PostgreSQL
 def obter_conexao_banco():
