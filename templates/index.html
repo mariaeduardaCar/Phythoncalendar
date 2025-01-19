@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendário Dinâmico</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen flex flex-col items-center">
+    <div class="max-w-4xl w-full p-6">
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-indigo-600">Calendário Dinâmico</h1>
+            <p class="text-gray-600">Navegue pelos meses e anos</p>
+        </header>
+
+        <!-- Controles de navegação -->
+        <div class="flex justify-between items-center mb-4">
+            <button id="mes-anterior" class="bg-indigo-500 text-white px-4 py-2 rounded shadow hover:bg-indigo-600">
+                Mês Anterior
+            </button>
+            <div id="mes-ano" class="text-xl font-bold text-gray-700"></div>
+            <button id="mes-posterior" class="bg-indigo-500 text-white px-4 py-2 rounded shadow hover:bg-indigo-600">
+                Próximo Mês
+            </button>
+        </div>
+
+        <!-- Grade do calendário -->
+        <div class="bg-white shadow-md rounded-lg p-6">
+            <div class="grid grid-cols-7 gap-4 text-center">
+                <!-- Cabeçalho dos dias da semana -->
+                <div class="font-semibold text-indigo-500">Dom</div>
+                <div class="font-semibold text-indigo-500">Seg</div>
+                <div class="font-semibold text-indigo-500">Ter</div>
+                <div class="font-semibold text-indigo-500">Qua</div>
+                <div class="font-semibold text-indigo-500">Qui</div>
+                <div class="font-semibold text-indigo-500">Sex</div>
+                <div class="font-semibold text-indigo-500">Sáb</div>
+
+                <!-- Células do calendário -->
+                <div id="calendario" class="col-span-7 grid grid-cols-7 gap-4 mt-4">
+                    <!-- Conteúdo gerado dinamicamente -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Botão para adicionar eventos -->
+        <button id="botao-adicionar-evento" class="fixed bottom-8 right-8 bg-indigo-500 text-white rounded-full shadow-lg w-12 h-12 flex items-center justify-center hover:bg-indigo-600">
+            +
+        </button>
+
+        <!-- Modal para adicionar eventos -->
+        <div id="modal-adicionar-evento" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white rounded-lg p-6 w-full max-w-md shadow-lg">
+                <h2 class="text-xl font-bold text-indigo-600 mb-4">Adicionar Evento</h2>
+                <form id="form-adicionar-evento">
+                    <div class="mb-4">
+                        <label for="titulo" class="block text-gray-700 font-semibold mb-1">Título</label>
+                        <input type="text" id="titulo" class="w-full border rounded p-2" required>
+                    </div>
+                    <div class="mb-4">
+                        <label for="descricao" class="block text-gray-700 font-semibold mb-1">Descrição</label>
+                        <textarea id="descricao" class="w-full border rounded p-2" rows="3" required></textarea>
+                    </div>
+                    <div class="mb-4">
+                        <label for="data_inicio" class="block text-gray-700 font-semibold mb-1">Data de Início</label>
+                        <input type="date" id="data_inicio" class="w-full border rounded p-2" required>
+                    </div>
+                    <div class="mb-4">
+                        <label for="data_fim" class="block text-gray-700 font-semibold mb-1">Data de Fim</label>
+                        <input type="date" id="data_fim" class="w-full border rounded p-2" required>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="button" id="fechar-modal" class="bg-gray-300 text-gray-700 px-4 py-2 rounded mr-2">Cancelar</button>
+                        <button type="submit" class="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600">Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let anoAtual = new Date().getFullYear();
+        let mesAtual = new Date().getMonth() + 1; // Janeiro = 0, então +1
+
+        async function carregarCalendario() {
+            const resposta = await fetch(`/calendario?ano=${anoAtual}&mes=${mesAtual}`);
+            const dados = await resposta.json();
+
+            const { calendario, mes, ano, primeiro_dia } = dados;
+
+            // Atualizar o título do mês e ano
+            const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+            document.getElementById("mes-ano").textContent = `${meses[mes - 1]} de ${ano}`;
+
+            // Gerar células do calendário
+            const calendarioContainer = document.getElementById("calendario");
+            calendarioContainer.innerHTML = "";
+
+            // Preencher os espaços vazios no início do calendário
+            for (let i = 0; i < primeiro_dia; i++) {
+                const celulaVazia = document.createElement("div");
+                calendarioContainer.appendChild(celulaVazia);
+            }
+
+            // Preencher os dias do mês
+            calendario.forEach(dia => {
+                const celula = document.createElement("div");
+                celula.classList.add("border", "border-gray-200", "rounded-lg", "p-2", "min-h-[50px]", "flex", "flex-col", "justify-start", "bg-gray-50");
+                
+                // Adicionar o número do dia
+                const numeroDia = document.createElement("div");
+                numeroDia.textContent = dia.dia;
+                numeroDia.classList.add("text-lg", "font-bold", "mb-2");
+                celula.appendChild(numeroDia);
+
+                // Adicionar os eventos do dia
+                if (dia.eventos && dia.eventos.length > 0) {
+                    dia.eventos.forEach(evento => {
+                        const eventoElemento = document.createElement("div");
+                        eventoElemento.textContent = evento.titulo;
+                        eventoElemento.classList.add("text-sm", "text-indigo-600", "truncate", "mb-1");
+                        celula.appendChild(eventoElemento);
+                    });
+                }
+
+                calendarioContainer.appendChild(celula);
+            });
+        }
+
+        // Eventos de navegação
+        document.getElementById("mes-anterior").addEventListener("click", () => {
+            if (mesAtual === 1) {
+                mesAtual = 12;
+                anoAtual--;
+            } else {
+                mesAtual--;
+            }
+            carregarCalendario();
+        });
+
+        document.getElementById("mes-posterior").addEventListener("click", () => {
+            if (mesAtual === 12) {
+                mesAtual = 1;
+                anoAtual++;
+            } else {
+                mesAtual++;
+            }
+            carregarCalendario();
+        });
+
+        // Referências aos elementos do modal
+        const botaoAdicionarEvento = document.getElementById("botao-adicionar-evento");
+        const modalAdicionarEvento = document.getElementById("modal-adicionar-evento");
+        const fecharModal = document.getElementById("fechar-modal");
+        const formAdicionarEvento = document.getElementById("form-adicionar-evento");
+
+        // Abrir modal ao clicar no botão "+"
+        botaoAdicionarEvento.addEventListener("click", () => {
+            modalAdicionarEvento.classList.remove("hidden");
+        });
+
+        // Fechar modal ao clicar em "Cancelar"
+        fecharModal.addEventListener("click", () => {
+            modalAdicionarEvento.classList.add("hidden");
+        });
+
+        // Enviar evento ao servidor
+        formAdicionarEvento.addEventListener("submit", async (e) => {
+            e.preventDefault();
+
+            const titulo = document.getElementById("titulo").value;
+            const descricao = document.getElementById("descricao").value;
+            const dataInicio = document.getElementById("data_inicio").value;
+            const dataFim = document.getElementById("data_fim").value;
+
+            const resposta = await fetch("/adicionar_evento", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    titulo,
+                    descricao,
+                    data_inicio: dataInicio,
+                    data_fim: dataFim,
+                }),
+            });
+
+            if (resposta.ok) {
+                alert("Evento adicionado com sucesso!");
+                modalAdicionarEvento.classList.add("hidden");
+                formAdicionarEvento.reset();
+                carregarCalendario(); // Atualizar calendário
+            } else {
+                alert("Erro ao adicionar o evento.");
+            }
+        });
+
+        // Carregar o calendário ao iniciar
+        carregarCalendario();
+    </script>
+</body>
+</html>
