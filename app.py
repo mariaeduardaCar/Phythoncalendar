@@ -1,6 +1,6 @@
 import os
 import psycopg2
-from flask import Flask, request, jsonify, redirect, url_for, render_template
+from flask import Flask, request, jsonify, redirect, url_for, render_template, session
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
@@ -8,18 +8,109 @@ from google.oauth2.credentials import Credentials
 from config import DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, GOOGLE_CALENDAR_CREDENTIALS
 from calendar import monthrange
 from datetime import datetime
+from google_auth_oauthlib.flow import Flow
+import json
 
 app = Flask(__name__)
+app.secret_key = '12345'  # Substitua por uma chave segura
+
+GOOGLE_CLIENT_SECRETS = 'credenciais.json'
+SCOPES = ['https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/userinfo.email', 'openid']
+REDIRECT_URI = 'https://calendariopy.herokuapp.com/callback'
 
 # Conectar ao banco de dados PostgreSQL
 def obter_conexao_banco():
     conexao = psycopg2.connect(host=DB_HOST, database=DB_NAME, user=DB_USER, password=DB_PASSWORD)
     return conexao
 
-
+# Inicializar o fluxo OAuth
+def criar_fluxo():
+    return Flow.from_client_secrets_file(
+        GOOGLE_CLIENT_SECRETS,
+        scopes=SCOPES,
+        redirect_uri=REDIRECT_URI
+    )
 @app.route('/')
 def index():
-    return render_template('index.html')  # Renderiza o front-end HTML
+    if 'credentials' in session:
+        # Se já estiver logado, redireciona diretamente para a página inicial
+        return render_template('index.html')  # Renderiza o template inicial
+    else:
+        # Exibe a página de login
+        return '''
+        <!DOCTYPE html>
+        <html lang="pt-br">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Página Inicial</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+        </head>
+        <body class="bg-gray-100 min-h-screen flex items-center justify-center">
+            <div class="text-center">
+                <h1 class="text-3xl font-bold mb-4 text-gray-800">Bem-vindo(a)!</h1>
+                <p class="text-gray-600 mb-6">Por favor, faça login para acessar seus eventos.</p>
+                <a href="/login" 
+                   class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                    Faça login com o Google
+                </a>
+            </div>
+        </body>
+        </html>
+        '''
+
+
+
+@app.route('/login')
+def login():
+    fluxo = criar_fluxo()
+    auth_url, _ = fluxo.authorization_url(prompt='consent')
+    return redirect(auth_url)
+@app.route('/callback')
+def callback():
+    fluxo = criar_fluxo()
+    fluxo.fetch_token(authorization_response=request.url)
+
+    # Salvar as credenciais na sessão
+    credenciais = fluxo.credentials
+    session['credentials'] = {
+        'token': credenciais.token,
+        'refresh_token': credenciais.refresh_token,
+        'token_uri': credenciais.token_uri,
+        'client_id': credenciais.client_id,
+        'client_secret': credenciais.client_secret,
+        'scopes': credenciais.scopes
+    }
+    return redirect(url_for('perfil'))
+
+@app.route('/perfil')
+def perfil():
+    if 'credentials' not in session:
+        return redirect(url_for('login'))
+
+    # Usar credenciais para acessar a API do Google
+    credenciais = Credentials(**session['credentials'])
+
+    # Atualizar token na sessão, se necessário
+    if not credenciais.valid and credenciais.expired and credenciais.refresh_token:
+        credenciais.refresh(Request())
+        session['credentials']['token'] = credenciais.token
+
+    # Obter informações do perfil
+    service = build('oauth2', 'v2', credentials=credenciais)
+    user_info = service.userinfo().get().execute()
+
+    # Salvar as informações do usuário na sessão, se necessário
+    session['user_info'] = user_info
+
+    # Redirecionar para a página inicial
+    return redirect(url_for('index'))
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('index'))
 
 def obter_eventos_publicos():
     SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
